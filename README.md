@@ -25,8 +25,6 @@ The intended target is:
 - MSI-based installation and upgrades
 - safe, maintainable production code rather than a one-off proof of concept
 
-This service does **not** self-update. New versions are distributed as MSI packages and upgraded manually or through external deployment tooling.
-
 ---
 
 ## Use case
@@ -98,3 +96,16 @@ For more detail, see:
 │   ├── architecture.md
 │   ├── configuration.md
 │   └── appsettings.example.json
+
+/src
+  /MulticastRelay.Service
+    Program.cs
+    appsettings.json
+    /Options
+    /Validation
+    /Services
+    /Protocol
+    /Logging
+
+/tests
+  /MulticastRelay.Service.Tests
