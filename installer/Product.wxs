@@ -23,9 +23,11 @@
     </Feature>
 
     <ComponentGroup Id="PublishedFiles" Directory="INSTALLFOLDER">
-      <Files
-        Include="$(var.PublishDir)\**"
-        Exclude="$(var.PublishDir)\MulticastProxy.Service.exe;$(var.PublishDir)\appsettings.json;$(var.PublishDir)\appsettings.Development.json" />
+      <Files Include="$(var.PublishDir)\**">
+        <Exclude Files="$(var.PublishDir)\MulticastProxy.Service.exe" />
+        <Exclude Files="$(var.PublishDir)\appsettings.json" />
+        <Exclude Files="$(var.PublishDir)\appsettings.Development.json" />
+      </Files>
     </ComponentGroup>
 
     <Component Id="ServiceExecutableComponent" Directory="INSTALLFOLDER" Guid="C8ED6D63-8A60-4C11-B177-A3C89449A20D">
