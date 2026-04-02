@@ -1,3 +1,9 @@
+
+---
+
+## `docs/configuration.md`
+
+```md
 # Configuration
 
 ## Goal
@@ -105,7 +111,7 @@ When to use:
 - systems where outbound multicast must leave through a specific interface
 
 If omitted:
-- the service may rely on default OS routing/interface behavior
+- the service may rely on default OS routing and interface behavior
 
 ---
 
@@ -153,50 +159,12 @@ Recommended troubleshooting value:
     "Default": "Debug"
 
 ### Suggested logging policy
-- `Information`: startup/shutdown, config validation, major state changes
+- `Information`: startup, shutdown, config validation, major state changes
 - `Warning`: transient errors, malformed packets, recoverable failures
 - `Error`: hard failures and startup-blocking issues
 - `Debug`: per-packet summaries and rewrite details
 
 Normal production deployments should not emit per-packet logs.
-
----
-
-## Update settings
-
-Self-update is optional but supported.
-
-### `Update:Enabled`
-Enables update checks.
-
-Example:
-
-    "Enabled": true
-
-### `Update:Channel`
-Optional release channel name.
-
-Example:
-
-    "Channel": "stable"
-
-### `Update:Repository`
-Public GitHub repository identifier.
-
-Example:
-
-    "Repository": "your-org/your-repo"
-
-### `Update:CheckIntervalHours`
-How often the service checks for updates.
-
-Example:
-
-    "CheckIntervalHours": 24
-
-Rules:
-- Do not store credentials or tokens here for public release checks.
-- If updates are disabled, the service must continue operating normally.
 
 ---
 
@@ -215,12 +183,6 @@ Rules:
   "Rewrite": {
     "PayloadRewriteSourceSubnet": "192.0.2.",
     "PayloadRewriteDestinationSubnet": "198.51.100."
-  },
-  "Update": {
-    "Enabled": true,
-    "Channel": "stable",
-    "Repository": "your-org/your-repo",
-    "CheckIntervalHours": 24
   },
   "Logging": {
     "LogLevel": {
