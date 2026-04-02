@@ -86,9 +86,10 @@ Configuration must be understandable by non-developers. Logging must be useful w
 ### 5. Public-repo safety
 No secrets, private endpoints, or customer-specific values may be embedded in source code.
 
----
+### 6. Keep upgrades external to the service
+The running service must not perform self-updates. New versions are distributed as MSI packages and applied manually or through external deployment tooling.
 
-## Proposed solution structure
+---
 
 ## Host layer
 
@@ -114,7 +115,6 @@ Use typed options classes, for example:
 
 - `RelayOptions`
 - `RewriteOptions`
-- `UpdateOptions`
 
 Responsibilities:
 - bind configuration from `appsettings.json`,
@@ -207,7 +207,7 @@ Optional future fields:
 - sender instance ID
 - packet ID
 - timestamp
-- hop count / TTL-like field
+- hop count or relay depth field
 
 Benefits:
 - the receiving side knows which multicast port to re-emit on,
@@ -243,6 +243,7 @@ Track locally emitted packets and suppress immediate re-forwarding if the same p
 
 Preferred approach:
 - **instance ID + short deduplication cache**
+
 This is more robust than a simple hop count.
 
 ---
@@ -258,8 +259,7 @@ Should log:
 - multicast join/bind failures,
 - tunnel listener startup,
 - remote peer send failures,
-- update check status,
-- major warnings/errors.
+- major warnings and errors.
 
 Should not log:
 - every packet,
@@ -279,45 +279,13 @@ For recurring failures, use throttling or aggregation where practical to avoid f
 
 ---
 
-## Self-update architecture
+## Deployment and upgrades
 
-Self-update is required, but it must be conservative and safe.
+This service does not perform self-updates.
 
-## Recommended approach
+New versions are distributed as MSI installers. Upgrade execution is handled manually or by external software deployment tooling. The installer is responsible for stopping the old service version, replacing binaries, and starting the updated version again.
 
-### Update source
-Use public GitHub Releases for distribution.
-
-### Metadata
-The service periodically checks:
-- current installed version,
-- latest available release,
-- channel policy if channels are used.
-
-### Verification
-Downloaded artifacts must be validated using at least:
-- checksum verification,
-and preferably:
-- signature verification.
-
-### Apply model
-Do **not** overwrite the running service executable in place.
-
-Preferred model:
-1. service detects new version,
-2. service downloads artifact to a staging folder,
-3. service validates artifact,
-4. service invokes a minimal updater helper or scheduled replacement mechanism,
-5. service stops cleanly,
-6. updater replaces binaries,
-7. service restarts,
-8. rollback remains possible if startup fails.
-
-### Failure behavior
-If GitHub is unavailable or validation fails:
-- continue running current version,
-- log the update failure,
-- do not disrupt traffic relay.
+This keeps the runtime service focused on packet relay and avoids unsafe in-process upgrade behavior.
 
 ---
 
@@ -331,7 +299,6 @@ If GitHub is unavailable or validation fails:
     /Options
       RelayOptions.cs
       RewriteOptions.cs
-      UpdateOptions.cs
     /Validation
       RelayOptionsValidator.cs
     /Services
@@ -341,7 +308,6 @@ If GitHub is unavailable or validation fails:
       TunnelReceiver.cs
       MulticastEmitter.cs
       PayloadRewriteService.cs
-      UpdateService.cs
       DeduplicationService.cs
     /Protocol
       RelayEnvelope.cs
@@ -355,7 +321,6 @@ If GitHub is unavailable or validation fails:
     PayloadRewriteTests.cs
     RelayEnvelopeTests.cs
     DeduplicationTests.cs
-    UpdateVersionTests.cs
 
 /docs
   architecture.md
