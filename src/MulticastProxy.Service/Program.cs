@@ -1,8 +1,6 @@
-using Microsoft.Extensions.Options;
 using MulticastProxy.Service.Options;
 using MulticastProxy.Service.Protocol;
 using MulticastProxy.Service.Services;
-using MulticastProxy.Service.Validation;
 
 var builder = Host.CreateApplicationBuilder(args);
 
@@ -15,16 +13,16 @@ ConfigureWindowsEventLog(builder);
 
 builder.Services
     .AddOptions<RelayOptions>()
-    .Bind(builder.Configuration.GetSection(RelayOptions.SectionName))
-    .ValidateOnStart();
+    .Bind(builder.Configuration.GetSection(RelayOptions.SectionName));
 
 builder.Services
     .AddOptions<RewriteOptions>()
-    .Bind(builder.Configuration.GetSection(RewriteOptions.SectionName))
-    .ValidateOnStart();
+    .Bind(builder.Configuration.GetSection(RewriteOptions.SectionName));
 
-builder.Services.AddSingleton<IValidateOptions<RelayOptions>, RelayOptionsValidator>();
-builder.Services.AddSingleton<IValidateOptions<RewriteOptions>, RewriteOptionsValidator>();
+builder.Services.Configure<HostOptions>(options =>
+{
+    options.BackgroundServiceExceptionBehavior = BackgroundServiceExceptionBehavior.Ignore;
+});
 
 builder.Services.AddSingleton<RelayEnvelopeSerializer>();
 builder.Services.AddSingleton<ITunnelSendQueue, TunnelSendQueue>();
