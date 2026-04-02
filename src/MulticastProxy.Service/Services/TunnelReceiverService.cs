@@ -31,34 +31,47 @@ public sealed class TunnelReceiverService : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        using var receiver = new UdpClient(new IPEndPoint(IPAddress.Any, _relayOptions.TunnelPort));
-        _logger.LogInformation("Tunnel receiver listening on UDP port {Port}.", _relayOptions.TunnelPort);
+        if (_relayOptions.TunnelPort is < 0 or > 65535)
+        {
+            _logger.LogError(
+                "Tunnel receiver disabled because Relay:TunnelPort '{TunnelPort}' is outside 0-65535.",
+                _relayOptions.TunnelPort);
+            return;
+        }
 
         while (!stoppingToken.IsCancellationRequested)
         {
+            UdpClient? receiver = null;
+
             try
             {
-                var result = await receiver.ReceiveAsync(stoppingToken);
-                if (!_serializer.TryDeserialize(result.Buffer, out var envelope, out var error) || envelope is null)
-                {
-                    _logger.LogWarning("Malformed relay envelope from {Remote}: {Error}", result.RemoteEndPoint, error);
-                    continue;
-                }
+                receiver = new UdpClient(new IPEndPoint(IPAddress.Any, _relayOptions.TunnelPort));
+                _logger.LogInformation("Tunnel receiver listening on UDP port {Port}.", _relayOptions.TunnelPort);
 
-                if (envelope.SenderInstanceId == _relayOptions.InstanceId)
+                while (!stoppingToken.IsCancellationRequested)
                 {
-                    _logger.LogDebug("Dropped packet {PacketId} from local instance ID.", envelope.PacketId);
-                    continue;
-                }
+                    var result = await receiver.ReceiveAsync(stoppingToken);
+                    if (!_serializer.TryDeserialize(result.Buffer, out var envelope, out var error) || envelope is null)
+                    {
+                        _logger.LogWarning("Malformed relay envelope from {Remote}: {Error}", result.RemoteEndPoint, error);
+                        continue;
+                    }
 
-                if (!_deduplicationService.TryRegister(envelope.PacketId))
-                {
-                    _logger.LogDebug("Dropped duplicate packet {PacketId}.", envelope.PacketId);
-                    continue;
-                }
+                    if (envelope.SenderInstanceId == _relayOptions.InstanceId)
+                    {
+                        _logger.LogDebug("Dropped packet {PacketId} from local instance ID.", envelope.PacketId);
+                        continue;
+                    }
 
-                await _emitQueue.EnqueueAsync(new RelayDatagram(envelope.OriginalMulticastPort, envelope.Payload), stoppingToken);
-                _logger.LogDebug("Accepted tunneled packet {PacketId} for multicast port {Port}.", envelope.PacketId, envelope.OriginalMulticastPort);
+                    if (!_deduplicationService.TryRegister(envelope.PacketId))
+                    {
+                        _logger.LogDebug("Dropped duplicate packet {PacketId}.", envelope.PacketId);
+                        continue;
+                    }
+
+                    await _emitQueue.EnqueueAsync(new RelayDatagram(envelope.OriginalMulticastPort, envelope.Payload), stoppingToken);
+                    _logger.LogDebug("Accepted tunneled packet {PacketId} for multicast port {Port}.", envelope.PacketId, envelope.OriginalMulticastPort);
+                }
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
@@ -66,13 +79,20 @@ public sealed class TunnelReceiverService : BackgroundService
             }
             catch (SocketException ex)
             {
-                _logger.LogWarning(ex, "Tunnel receiver socket failure; continuing.");
+                _logger.LogWarning(
+                    ex,
+                    "Tunnel receiver socket failure on UDP port {Port}; retrying.",
+                    _relayOptions.TunnelPort);
                 await Task.Delay(TimeSpan.FromSeconds(1), stoppingToken);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Unexpected tunnel receiver error; continuing.");
                 await Task.Delay(TimeSpan.FromSeconds(1), stoppingToken);
+            }
+            finally
+            {
+                receiver?.Dispose();
             }
         }
     }
