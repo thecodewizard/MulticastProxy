@@ -35,7 +35,7 @@ This project must prioritize reliability, safe operations, simple configuration 
 - Configuration must be simple for non-technical operators.
 - Prefer `appsettings.json` plus environment-specific overrides.
 - All important settings must be documented in a sample config file.
-- Never hardcode production IPs, ports, repo URLs, tokens, secrets, or environment-specific paths.
+- Never hardcode production IPs, ports, secrets, or environment-specific paths.
 - Validate configuration at startup and fail fast with human-readable Event Log messages.
 - Use explicit typed options classes for configuration.
 
@@ -49,19 +49,22 @@ Suggested configuration model:
 - `PayloadRewriteSourceSubnet`: optional string
 - `PayloadRewriteDestinationSubnet`: optional string
 - `Logging:LogLevel`
-- `Update:Enabled`
-- `Update:Channel`
-- `Update:Repository`
-- `Update:CheckIntervalHours`
 
 ---
 
 ## Security and public-repo rules
 - This repository is public. Never introduce secrets, API keys, tokens, credentials, private endpoints, or customer-specific addressing into source control.
-- Any self-update mechanism must work without embedded secrets.
 - Assume all config files except example templates may contain sensitive environment details; avoid logging sensitive config values unless explicitly running in debug mode.
-- Do not add auto-update behavior that executes untrusted code without signature or integrity validation.
-- Prefer release-based updates with checksum/signature verification over ad hoc script download-and-run patterns.
+- Do not add any network-driven code execution, remote script download, or unsafe binary replacement logic.
+- Keep all public examples on RFC documentation ranges and documentation-only values.
+
+---
+
+## Deployment and upgrade rules
+- This service must not self-update.
+- New versions are distributed as MSI packages and installed manually or through external deployment tooling.
+- Do not implement GitHub polling, release checking, updater helpers, or in-place binary replacement unless explicitly requested later.
+- Keep the runtime service focused on packet relay, configuration validation, and logging.
 
 ---
 
@@ -86,21 +89,7 @@ Suggested configuration model:
   - listener bind/join failures
   - remote send failures
   - packet counts / packet summaries at debug level
-  - update events
 - Do not spam Event Log with per-packet informational logs in normal mode.
-
----
-
-## Self-update rules
-- Self-update is required, but safety and operability come first.
-- Prefer a design where:
-  - the service checks a GitHub release feed or release metadata,
-  - downloads a signed or checksum-verified release artifact,
-  - stages the update,
-  - applies it safely with restart coordination.
-- Do not implement unsafe in-place overwrite of running binaries without a rollback or recovery plan.
-- If a helper updater executable is needed, keep it minimal and well documented.
-- Any update feature must degrade safely when GitHub is unavailable.
 
 ---
 
@@ -114,7 +103,6 @@ Suggested configuration model:
   - unicast tunnel service
   - multicast re-emission service
   - payload rewrite service
-  - update service
   - Windows service host/bootstrap
   - logging/event log integration
 - Keep customer-specific constants out of business logic.
@@ -137,7 +125,6 @@ At minimum, add tests for:
 - subnet rewrite logic
 - invalid rewrite configuration
 - loop-prevention logic if implemented
-- updater version comparison logic
 - packet handling behavior that can be tested without live multicast infrastructure
 
 If integration tests are added, keep them separate from fast unit tests.
