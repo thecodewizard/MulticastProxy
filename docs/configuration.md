@@ -27,6 +27,7 @@ Example:
     "MulticastGroup": "239.0.0.1"
 
 Notes:
+- 239.0.0.0/8 is used here as an example administratively scoped multicast range for documentation.
 - Must be a valid IPv4 multicast address if used.
 - Do not hardcode this in source code.
 
