@@ -1,11 +1,15 @@
-<Project Sdk="WixToolset.Sdk/5.0.2">
+<Project Sdk="WixToolset.Sdk/5.0.2" ToolsVersion="4.0">
   <PropertyGroup>
     <OutputType>Package</OutputType>
-    <Platform>x64</Platform>
-    <DefineConstants>PublishDir=..\artifacts\publish\win-x64</DefineConstants>
+    <InstallerPlatform>x64</InstallerPlatform>
+    <PublishDir>$(MSBuildThisFileDirectory)..\artifacts\publish\win-x64\</PublishDir>
+    <DefineConstants>PublishDir=$(PublishDir)</DefineConstants>
+    <ProjectGuid>{fe06ec3f-d832-4745-adb4-91d24a5a0a65}</ProjectGuid>
   </PropertyGroup>
-
-  <ItemGroup>
-    <PackageReference Include="WixToolset.Util.wixext" Version="5.0.2" />
-  </ItemGroup>
+  <Target Name="PreparePublishedFiles" BeforeTargets="Build">
+    <Message Text="Publishing service to $(PublishDir)" Importance="high" />
+    <RemoveDir Directories="$(PublishDir)" Condition="Exists('$(PublishDir)')" />
+    <MakeDir Directories="$(PublishDir)" />
+    <Exec Command="dotnet publish &quot;$(MSBuildThisFileDirectory)..\src\MulticastProxy.Service\MulticastProxy.Service.csproj&quot; -c $(Configuration) -r win-x64 --self-contained true -o &quot;$(PublishDir)&quot;" />
+  </Target>
 </Project>

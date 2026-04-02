@@ -23,15 +23,24 @@
     </Feature>
 
     <ComponentGroup Id="PublishedFiles" Directory="INSTALLFOLDER">
-      <Files Include="$(var.PublishDir)\**">
-        <Exclude Files="$(var.PublishDir)\MulticastProxy.Service.exe" />
-        <Exclude Files="$(var.PublishDir)\appsettings.json" />
-        <Exclude Files="$(var.PublishDir)\appsettings.Development.json" />
+      <Files Include="$(var.PublishDir)**">
+        <Exclude Files="$(var.PublishDir)MulticastProxy.Service.exe" />
+        <Exclude Files="$(var.PublishDir)appsettings.json" />
+        <Exclude Files="$(var.PublishDir)appsettings.Development.json" />
       </Files>
     </ComponentGroup>
 
-    <Component Id="ServiceExecutableComponent" Directory="INSTALLFOLDER" Guid="C8ED6D63-8A60-4C11-B177-A3C89449A20D">
-      <File Id="ServiceExecutableFile" Source="$(var.PublishDir)\MulticastProxy.Service.exe" KeyPath="yes" />
+    <Component
+      Id="ServiceExecutableComponent"
+      Directory="INSTALLFOLDER"
+      Guid="C8ED6D63-8A60-4C11-B177-A3C89449A20D"
+      Bitness="always64">
+
+      <File
+        Id="ServiceExecutableFile"
+        Source="$(var.PublishDir)MulticastProxy.Service.exe"
+        KeyPath="yes" />
+
       <ServiceInstall
         Id="MulticastProxyServiceInstall"
         Name="MulticastProxy"
@@ -41,6 +50,7 @@
         Start="auto"
         ErrorControl="normal"
         Account="LocalSystem" />
+
       <ServiceControl
         Id="MulticastProxyServiceControl"
         Name="MulticastProxy"
@@ -50,9 +60,17 @@
         Wait="yes" />
     </Component>
 
-    <Component Id="ConfigComponent" Directory="INSTALLFOLDER" Guid="3A4EE8D4-7A7A-4380-B660-59A90D9A2047">
-      <File Id="AppSettingsFile" Source="$(var.PublishDir)\appsettings.json" KeyPath="yes" />
-      <File Id="AppSettingsDevelopmentFile" Source="$(var.PublishDir)\appsettings.Development.json" />
+    <Component
+      Id="ConfigComponent"
+      Directory="INSTALLFOLDER"
+      Guid="3A4EE8D4-7A7A-4380-B660-59A90D9A2047"
+      Bitness="always64"
+      NeverOverwrite="yes">
+
+      <File
+        Id="AppSettingsFile"
+        Source="$(var.PublishDir)appsettings.json"
+        KeyPath="yes" />
     </Component>
   </Package>
 </Wix>
