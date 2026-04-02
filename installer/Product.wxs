@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <Package
+    Name="MulticastProxy"
+    Manufacturer="MulticastProxy"
+    Version="1.0.0"
+    UpgradeCode="5B6975FB-40C2-4E4B-9EFA-35FDF7E88590"
+    InstallerVersion="500"
+    Scope="perMachine">
+
+    <SummaryInformation Description="MulticastProxy Windows Service installer." />
+    <MajorUpgrade DowngradeErrorMessage="A newer version of MulticastProxy is already installed." />
+    <MediaTemplate EmbedCab="yes" />
+
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="INSTALLFOLDER" Name="MulticastProxy" />
+    </StandardDirectory>
+
+    <Feature Id="MainFeature" Title="MulticastProxy" Level="1">
+      <ComponentGroupRef Id="PublishedFiles" />
+      <ComponentRef Id="ServiceExecutableComponent" />
+      <ComponentRef Id="ConfigComponent" />
+    </Feature>
+
+    <ComponentGroup Id="PublishedFiles" Directory="INSTALLFOLDER">
+      <Files
+        Include="$(var.PublishDir)\**"
+        Exclude="$(var.PublishDir)\MulticastProxy.Service.exe;$(var.PublishDir)\appsettings.json;$(var.PublishDir)\appsettings.Development.json" />
+    </ComponentGroup>
+
+    <Component Id="ServiceExecutableComponent" Directory="INSTALLFOLDER" Guid="C8ED6D63-8A60-4C11-B177-A3C89449A20D">
+      <File Id="ServiceExecutableFile" Source="$(var.PublishDir)\MulticastProxy.Service.exe" KeyPath="yes" />
+      <ServiceInstall
+        Id="MulticastProxyServiceInstall"
+        Name="MulticastProxy"
+        DisplayName="MulticastProxy"
+        Description="Relays multicast traffic between Layer 3 networks."
+        Type="ownProcess"
+        Start="auto"
+        ErrorControl="normal"
+        Account="LocalSystem" />
+      <ServiceControl
+        Id="MulticastProxyServiceControl"
+        Name="MulticastProxy"
+        Start="install"
+        Stop="both"
+        Remove="uninstall"
+        Wait="yes" />
+    </Component>
+
+    <Component Id="ConfigComponent" Directory="INSTALLFOLDER" Guid="3A4EE8D4-7A7A-4380-B660-59A90D9A2047">
+      <File Id="AppSettingsFile" Source="$(var.PublishDir)\appsettings.json" KeyPath="yes" />
+      <File Id="AppSettingsDevelopmentFile" Source="$(var.PublishDir)\appsettings.Development.json" />
+    </Component>
+  </Package>
+</Wix>
