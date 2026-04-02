@@ -20,9 +20,9 @@ The service is intended to run unattended as a Windows Service and must remain s
 Some devices or applications use multicast or multicast-like discovery patterns on a local network. Routed Layer 3 boundaries usually prevent this traffic from traversing to another network segment.
 
 This service provides a controlled relay mechanism:
-- **local multicast in**
-- **unicast tunnel across Layer 3**
-- **remote multicast out**
+- local multicast in
+- unicast tunnel across Layer 3
+- remote multicast out
 
 This is not intended to become a general-purpose router or bridge. It is a narrowly scoped application-layer relay.
 
@@ -31,9 +31,9 @@ This is not intended to become a general-purpose router or bridge. It is a narro
 ## High-level packet flow
 
 ### Direction A -> B
-1. Service A joins the configured multicast group(s) on its local interface.
+1. Service A joins the configured multicast group on its local interface.
 2. Service A receives a multicast UDP datagram on a configured multicast port.
-3. Service A optionally wraps the datagram in a small relay envelope.
+3. Service A wraps the datagram in a small relay envelope.
 4. Service A sends the datagram over unicast UDP to Service B on the configured tunnel port.
 5. Service B receives the unicast relay packet.
 6. Service B optionally rewrites payload content.
@@ -46,24 +46,24 @@ The same flow occurs in reverse using the same service behavior on the opposite 
 
 ## Deployment model
 
-The intended deployment model is **one instance per network**.
+The intended deployment model is one instance per network.
 
 Example:
 
-- **Site A**
-  - Local multicast source network
-  - Relay service instance A
-- **Site B**
-  - Local multicast destination network
-  - Relay service instance B
+- Site A
+  - local multicast source network
+  - relay service instance A
+- Site B
+  - local multicast destination network
+  - relay service instance B
 
 Each instance is configured with:
-- the remote peer IP,
-- the tunnel port,
-- one or more multicast ports,
-- the multicast group,
-- optional interface bindings,
-- optional payload rewrite settings.
+- the remote peer IP
+- the tunnel port
+- one or more multicast ports
+- the multicast group
+- optional interface bindings
+- optional payload rewrite settings
 
 This allows the same binary and same service design to operate on both ends.
 
@@ -86,9 +86,6 @@ Configuration must be understandable by non-developers. Logging must be useful w
 ### 5. Public-repo safety
 No secrets, private endpoints, or customer-specific values may be embedded in source code.
 
-### 6. Keep upgrades external to the service
-The running service must not perform self-updates. New versions are distributed as MSI packages and applied manually or through external deployment tooling.
-
 ---
 
 ## Host layer
@@ -100,11 +97,11 @@ The application should use:
 - `UseWindowsService()`
 
 Responsibilities:
-- lifecycle startup/shutdown,
-- dependency injection,
-- configuration loading,
-- logging configuration,
-- hosted background service registration.
+- lifecycle startup and shutdown
+- dependency injection
+- configuration loading
+- logging configuration
+- hosted background service registration
 
 ---
 
@@ -112,22 +109,21 @@ Responsibilities:
 
 ### Typed options
 Use typed options classes, for example:
-
 - `RelayOptions`
 - `RewriteOptions`
 
 Responsibilities:
-- bind configuration from `appsettings.json`,
-- validate all required fields,
-- reject invalid startup config,
-- provide clean dependency injection to services.
+- bind configuration from `appsettings.json`
+- validate all required fields
+- reject invalid startup config
+- provide clean dependency injection to services
 
 Recommended validation:
-- port ranges must be 0-65535,
-- destination IP must parse,
-- multicast group must parse if configured,
-- rewrite source and destination subnets must both be present if rewrite is enabled,
-- interface IPs must parse if provided.
+- port ranges must be 0-65535
+- destination IP must parse
+- multicast group must parse if configured
+- rewrite source and destination subnets must both be present if rewrite is enabled
+- interface IPs must parse if provided
 
 ---
 
@@ -135,37 +131,37 @@ Recommended validation:
 
 ### Multicast receive service
 Responsibilities:
-- bind UDP listeners for configured multicast ports,
-- join the configured multicast group,
-- optionally bind to a specified local interface,
-- receive multicast datagrams,
-- hand packets to the tunnel sender pipeline.
+- bind UDP listeners for configured multicast ports
+- join the configured multicast group
+- optionally bind to a specified local interface
+- receive multicast datagrams
+- hand packets to the tunnel sender pipeline
 
 Notes:
-- socket reuse options may be required,
-- listener behavior must be explicit and documented,
-- receive loops must support cancellation cleanly.
+- socket reuse options may be required
+- listener behavior must be explicit and documented
+- receive loops must support cancellation cleanly
 
 ### Tunnel sender service
 Responsibilities:
-- transmit relay packets as unicast UDP to the configured remote peer,
-- include enough metadata for the receiver to know the original multicast port,
-- handle transient send failures,
-- log operational failures at the correct level.
+- transmit relay packets as unicast UDP to the configured remote peer
+- include enough metadata for the receiver to know the original multicast port
+- handle transient send failures
+- log operational failures at the correct level
 
 ### Tunnel receiver service
 Responsibilities:
-- listen on the configured unicast tunnel port,
-- validate incoming relay packets,
-- reject malformed relay envelopes,
-- hand payloads to the multicast emitter pipeline.
+- listen on the configured unicast tunnel port
+- validate incoming relay packets
+- reject malformed relay envelopes
+- hand payloads to the multicast emitter pipeline
 
 ### Multicast emit service
 Responsibilities:
-- re-emit received payloads onto the configured multicast group and original multicast port,
-- optionally bind outgoing multicast to a chosen interface,
-- keep multicast scope controlled,
-- log send failures without crashing the service.
+- re-emit received payloads onto the configured multicast group and original multicast port
+- optionally bind outgoing multicast to a chosen interface
+- keep multicast scope controlled
+- log send failures without crashing the service
 
 ---
 
@@ -173,16 +169,16 @@ Responsibilities:
 
 ### Rewrite service
 Responsibilities:
-- inspect payload bytes only if rewrite is enabled,
-- attempt safe rewrite of source subnet references to destination subnet references,
-- preserve original bytes on failure,
-- avoid corrupting non-text or binary payloads.
+- inspect payload bytes only if rewrite is enabled
+- attempt safe rewrite of source subnet references to destination subnet references
+- preserve original bytes on failure
+- avoid corrupting non-text or binary payloads
 
 Recommended behavior:
-- if rewrite is disabled, return original bytes untouched,
-- if payload cannot be safely interpreted for rewrite, pass through unchanged and log at debug/warning level,
-- do not assume ASCII unless the protocol guarantees ASCII,
-- avoid broad regex replacements that could rewrite unintended data.
+- if rewrite is disabled, return original bytes untouched
+- if payload cannot be safely interpreted for rewrite, pass through unchanged and log at debug or warning level
+- do not assume ASCII unless the protocol guarantees ASCII
+- avoid broad replacements that could rewrite unintended data
 
 Preferred implementation strategy:
 1. Try to detect whether the payload is valid text in the expected encoding.
@@ -210,19 +206,19 @@ Optional future fields:
 - hop count or relay depth field
 
 Benefits:
-- the receiving side knows which multicast port to re-emit on,
-- future protocol evolution becomes easier,
-- loop-prevention metadata can be added cleanly,
-- malformed tunnel payloads can be rejected early.
+- the receiving side knows which multicast port to re-emit on
+- future protocol evolution becomes easier
+- loop-prevention metadata can be added cleanly
+- malformed tunnel payloads can be rejected early
 
 ---
 
 ## Loop prevention
 
 Loop prevention is important if:
-- both peers relay the same multicast domains bidirectionally,
-- a re-emitted packet can be observed again by the originating side,
-- the network topology may reflect or duplicate traffic.
+- both peers relay the same multicast domains bidirectionally
+- a re-emitted packet can be observed again by the originating side
+- the network topology may reflect or duplicate traffic
 
 At minimum, one of these protections should exist:
 
@@ -235,14 +231,14 @@ The receiving service keeps a short-lived cache of recently seen packet IDs and 
 
 ### Option B: hop count
 Each relay packet contains a hop count.
-- locally received multicast packets are sent with hop count = 1,
-- the receiver decrements or rejects if already relayed.
+- locally received multicast packets are sent with hop count = 1
+- the receiver decrements or rejects if already relayed
 
 ### Option C: source marking
 Track locally emitted packets and suppress immediate re-forwarding if the same packet reappears.
 
 Preferred approach:
-- **instance ID + short deduplication cache**
+- instance ID plus short deduplication cache
 
 This is more robust than a simple hop count.
 
@@ -254,38 +250,28 @@ Logging should use standard .NET logging and the Windows Event Log provider.
 
 ### Normal mode
 Should log:
-- service startup and shutdown,
-- configuration validation failures,
-- multicast join/bind failures,
-- tunnel listener startup,
-- remote peer send failures,
-- major warnings and errors.
+- service startup and shutdown
+- configuration validation failures
+- multicast join and bind failures
+- tunnel listener startup
+- remote peer send failures
+- major warnings and errors
 
 Should not log:
-- every packet,
-- repetitive identical warnings without throttling.
+- every packet
+- repetitive identical warnings without throttling
 
 ### Debug mode
 May additionally log:
-- packet receive summaries,
-- packet send summaries,
-- rewrite decisions,
-- socket details,
-- deduplication decisions,
-- remote endpoint details.
+- packet receive summaries
+- packet send summaries
+- rewrite decisions
+- socket details
+- deduplication decisions
+- remote endpoint details
 
-### Throttling / noise control
+### Throttling and noise control
 For recurring failures, use throttling or aggregation where practical to avoid flooding Event Log.
-
----
-
-## Deployment and upgrades
-
-This service does not perform self-updates.
-
-New versions are distributed as MSI installers. Upgrade execution is handled manually or by external software deployment tooling. The installer is responsible for stopping the old service version, replacing binaries, and starting the updated version again.
-
-This keeps the runtime service focused on packet relay and avoids unsafe in-process upgrade behavior.
 
 ---
 
