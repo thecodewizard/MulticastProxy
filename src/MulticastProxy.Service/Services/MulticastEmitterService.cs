@@ -26,11 +26,56 @@ public sealed class MulticastEmitterService : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        var multicastGroup = IPAddress.Parse(_relayOptions.MulticastGroup);
+        if (!NetworkInterfaceHelper.TryParseIPv4(_relayOptions.MulticastGroup, out var multicastGroup)
+            || multicastGroup is null
+            || !NetworkInterfaceHelper.IsIPv4Multicast(multicastGroup))
+        {
+            _logger.LogError(
+                "Multicast emitter disabled because Relay:MulticastGroup '{MulticastGroup}' is not a valid IPv4 multicast address.",
+                _relayOptions.MulticastGroup);
+            return;
+        }
+
+        IPAddress? sendInterface = null;
+        if (!string.IsNullOrWhiteSpace(_relayOptions.SendInterfaceIP))
+        {
+            if (!NetworkInterfaceHelper.TryParseIPv4(_relayOptions.SendInterfaceIP, out sendInterface) || sendInterface is null)
+            {
+                _logger.LogError(
+                    "Multicast emitter disabled because Relay:SendInterfaceIP '{SendInterface}' is not a valid IPv4 address.",
+                    _relayOptions.SendInterfaceIP);
+                return;
+            }
+
+            if (!NetworkInterfaceHelper.IsLocalIPv4Address(sendInterface))
+            {
+                _logger.LogError(
+                    "Multicast emitter disabled because Relay:SendInterfaceIP '{SendInterface}' is not assigned to any local network interface.",
+                    sendInterface);
+                return;
+            }
+        }
+
         using var sender = new UdpClient(AddressFamily.InterNetwork);
 
-        sender.Client.SetSocketOption(SocketOptionLevel.IP, SocketOptionName.MulticastTimeToLive, 1);
-        TryConfigureSendInterface(sender.Client);
+        try
+        {
+            sender.Client.SetSocketOption(SocketOptionLevel.IP, SocketOptionName.MulticastTimeToLive, 1);
+            if (!TryConfigureSendInterface(sender.Client, sendInterface))
+            {
+                return;
+            }
+        }
+        catch (SocketException ex)
+        {
+            _logger.LogError(ex, "Multicast emitter disabled because socket setup failed.");
+            return;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Multicast emitter disabled due to unexpected startup error.");
+            return;
+        }
 
         _logger.LogInformation("Multicast emitter started for group {Group}.", multicastGroup);
 
@@ -58,25 +103,26 @@ public sealed class MulticastEmitterService : BackgroundService
         }
     }
 
-    private void TryConfigureSendInterface(Socket socket)
+    private bool TryConfigureSendInterface(Socket socket, IPAddress? sendInterface)
     {
-        if (string.IsNullOrWhiteSpace(_relayOptions.SendInterfaceIP)
-            || !IPAddress.TryParse(_relayOptions.SendInterfaceIP, out var sendInterface))
+        if (sendInterface is null)
         {
-            return;
+            return true;
         }
 
         try
         {
             socket.SetSocketOption(SocketOptionLevel.IP, SocketOptionName.MulticastInterface, sendInterface.GetAddressBytes());
             _logger.LogInformation("Using send interface {InterfaceAddress} for multicast emission.", sendInterface);
+            return true;
         }
         catch (SocketException ex)
         {
-            _logger.LogWarning(
+            _logger.LogError(
                 ex,
-                "Failed to apply Relay:SendInterfaceIP '{InterfaceAddress}'. Falling back to OS-selected multicast interface.",
+                "Multicast emitter disabled because Relay:SendInterfaceIP '{InterfaceAddress}' could not be applied.",
                 sendInterface);
+            return false;
         }
     }
 }

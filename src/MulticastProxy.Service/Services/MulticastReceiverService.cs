@@ -24,17 +24,63 @@ public sealed class MulticastReceiverService : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        _logger.LogInformation("Multicast receiver started for {PortCount} ports.", _relayOptions.MulticastPorts.Count);
+        if (!NetworkInterfaceHelper.TryParseIPv4(_relayOptions.MulticastGroup, out var multicastGroup)
+            || multicastGroup is null
+            || !NetworkInterfaceHelper.IsIPv4Multicast(multicastGroup))
+        {
+            _logger.LogError(
+                "Multicast receiver disabled because Relay:MulticastGroup '{MulticastGroup}' is not a valid IPv4 multicast address.",
+                _relayOptions.MulticastGroup);
+            return;
+        }
 
-        var tasks = _relayOptions.MulticastPorts
+        if (_relayOptions.MulticastPorts.Count == 0)
+        {
+            _logger.LogWarning("Multicast receiver disabled because Relay:MulticastPorts is empty.");
+            return;
+        }
+
+        IPAddress? listenInterface = null;
+        if (!string.IsNullOrWhiteSpace(_relayOptions.ListenInterfaceIP))
+        {
+            if (!NetworkInterfaceHelper.TryParseIPv4(_relayOptions.ListenInterfaceIP, out listenInterface) || listenInterface is null)
+            {
+                _logger.LogError(
+                    "Multicast receiver disabled because Relay:ListenInterfaceIP '{ListenInterface}' is not a valid IPv4 address.",
+                    _relayOptions.ListenInterfaceIP);
+                return;
+            }
+
+            if (!NetworkInterfaceHelper.IsLocalIPv4Address(listenInterface))
+            {
+                _logger.LogError(
+                    "Multicast receiver disabled because Relay:ListenInterfaceIP '{ListenInterface}' is not assigned to any local network interface.",
+                    listenInterface);
+                return;
+            }
+        }
+
+        var ports = _relayOptions.MulticastPorts
             .Distinct()
-            .Select(port => RunReceiverForPortAsync(port, stoppingToken))
+            .Where(port => port is >= 0 and <= 65535)
+            .ToArray();
+
+        if (ports.Length == 0)
+        {
+            _logger.LogError("Multicast receiver disabled because Relay:MulticastPorts has no values in range 0-65535.");
+            return;
+        }
+
+        _logger.LogInformation("Multicast receiver started for {PortCount} ports.", ports.Length);
+
+        var tasks = ports
+            .Select(port => RunReceiverForPortAsync(port, multicastGroup, listenInterface, stoppingToken))
             .ToArray();
 
         await Task.WhenAll(tasks);
     }
 
-    private async Task RunReceiverForPortAsync(int port, CancellationToken cancellationToken)
+    private async Task RunReceiverForPortAsync(int port, IPAddress multicastGroup, IPAddress? listenInterface, CancellationToken cancellationToken)
     {
         while (!cancellationToken.IsCancellationRequested)
         {
@@ -44,11 +90,9 @@ public sealed class MulticastReceiverService : BackgroundService
             {
                 udp.Client.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.ReuseAddress, true);
                 udp.Client.Bind(new IPEndPoint(IPAddress.Any, port));
+                JoinMulticastGroup(udp, multicastGroup, listenInterface);
 
-                var multicast = IPAddress.Parse(_relayOptions.MulticastGroup);
-                JoinMulticastGroup(udp, multicast);
-
-                _logger.LogInformation("Listening for multicast group {Group} on port {Port}.", _relayOptions.MulticastGroup, port);
+                _logger.LogInformation("Listening for multicast group {Group} on port {Port}.", multicastGroup, port);
 
                 while (!cancellationToken.IsCancellationRequested)
                 {
@@ -59,6 +103,15 @@ public sealed class MulticastReceiverService : BackgroundService
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
+                break;
+            }
+            catch (SocketException ex) when (ex.SocketErrorCode == SocketError.AddressNotAvailable && listenInterface is not null)
+            {
+                _logger.LogError(
+                    ex,
+                    "Multicast receiver for port {Port} disabled because listen interface {InterfaceAddress} is not available.",
+                    port,
+                    listenInterface);
                 break;
             }
             catch (SocketException ex)
@@ -74,31 +127,18 @@ public sealed class MulticastReceiverService : BackgroundService
         }
     }
 
-    private void JoinMulticastGroup(UdpClient udp, IPAddress multicast)
+    private void JoinMulticastGroup(UdpClient udp, IPAddress multicast, IPAddress? listenInterface)
     {
-        if (string.IsNullOrWhiteSpace(_relayOptions.ListenInterfaceIP)
-            || !IPAddress.TryParse(_relayOptions.ListenInterfaceIP, out var listenInterface))
+        if (listenInterface is null)
         {
             udp.JoinMulticastGroup(multicast);
             return;
         }
 
-        try
-        {
-            udp.JoinMulticastGroup(multicast, listenInterface);
-            _logger.LogInformation(
-                "Joined multicast group {Group} using listen interface {InterfaceAddress}.",
-                multicast,
-                listenInterface);
-        }
-        catch (SocketException ex)
-        {
-            _logger.LogWarning(
-                ex,
-                "Failed to apply Relay:ListenInterfaceIP '{InterfaceAddress}' for group {Group}. Falling back to default interface.",
-                listenInterface,
-                multicast);
-            udp.JoinMulticastGroup(multicast);
-        }
+        udp.JoinMulticastGroup(multicast, listenInterface);
+        _logger.LogInformation(
+            "Joined multicast group {Group} using listen interface {InterfaceAddress}.",
+            multicast,
+            listenInterface);
     }
 }

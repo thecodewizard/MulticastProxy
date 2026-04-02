@@ -27,7 +27,23 @@ public sealed class TunnelSenderService : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        var destination = new IPEndPoint(IPAddress.Parse(_relayOptions.DestinationIP), _relayOptions.TunnelPort);
+        if (!NetworkInterfaceHelper.TryParseIPv4(_relayOptions.DestinationIP, out var destinationIp) || destinationIp is null)
+        {
+            _logger.LogError(
+                "Tunnel sender disabled because Relay:DestinationIP '{DestinationIP}' is not a valid IPv4 address.",
+                _relayOptions.DestinationIP);
+            return;
+        }
+
+        if (_relayOptions.TunnelPort is < 0 or > 65535)
+        {
+            _logger.LogError(
+                "Tunnel sender disabled because Relay:TunnelPort '{TunnelPort}' is outside 0-65535.",
+                _relayOptions.TunnelPort);
+            return;
+        }
+
+        var destination = new IPEndPoint(destinationIp, _relayOptions.TunnelPort);
         using var sender = new UdpClient(AddressFamily.InterNetwork);
 
         _logger.LogInformation("Tunnel sender started for destination {Destination}.", destination);
