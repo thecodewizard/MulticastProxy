@@ -42,6 +42,17 @@ public class RelayOptionsValidationTests
     }
 
     [Fact]
+    public void Validate_WhenMulticastGroupIsWildcardAddress_ReturnsSuccess()
+    {
+        var options = CreateValidOptions();
+        options.MulticastGroup = "224.0.0.0";
+
+        var result = _validator.Validate(null, options);
+
+        Assert.True(result.Succeeded);
+    }
+
+    [Fact]
     public void RewriteValidator_WhenOnlyOneSubnetProvided_Fails()
     {
         var validator = new RewriteOptionsValidator();

@@ -129,6 +129,14 @@ public sealed class MulticastReceiverService : BackgroundService
 
     private void JoinMulticastGroup(UdpClient udp, IPAddress multicast, IPAddress? listenInterface)
     {
+        if (IsWildcardMulticastGroup(multicast))
+        {
+            _logger.LogWarning(
+                "Relay:MulticastGroup is configured as {Group}. Running in wildcard mode (no IGMP join); receiving multicast now depends on OS socket behavior.",
+                multicast);
+            return;
+        }
+
         if (listenInterface is null)
         {
             udp.JoinMulticastGroup(multicast);
@@ -140,5 +148,11 @@ public sealed class MulticastReceiverService : BackgroundService
             "Joined multicast group {Group} using listen interface {InterfaceAddress}.",
             multicast,
             listenInterface);
+    }
+
+    private static bool IsWildcardMulticastGroup(IPAddress multicast)
+    {
+        var bytes = multicast.GetAddressBytes();
+        return bytes[0] == 224 && bytes[1] == 0 && bytes[2] == 0 && bytes[3] == 0;
     }
 }

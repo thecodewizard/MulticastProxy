@@ -29,6 +29,7 @@ Example:
 Notes:
 - `239.0.0.0/8` is used here as an example administratively scoped multicast range for documentation.
 - Must be a valid IPv4 multicast address if used.
+- `224.0.0.0` is treated as wildcard mode: the service binds to the configured port but does not issue an IGMP join, so receive behavior depends on OS socket behavior.
 - Do not hardcode this in source code.
 
 ---
