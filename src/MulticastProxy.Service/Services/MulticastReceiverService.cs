@@ -46,15 +46,7 @@ public sealed class MulticastReceiverService : BackgroundService
                 udp.Client.Bind(new IPEndPoint(IPAddress.Any, port));
 
                 var multicast = IPAddress.Parse(_relayOptions.MulticastGroup);
-                if (!string.IsNullOrWhiteSpace(_relayOptions.ListenInterfaceIP)
-                    && IPAddress.TryParse(_relayOptions.ListenInterfaceIP, out var listenInterface))
-                {
-                    udp.JoinMulticastGroup(multicast, listenInterface);
-                }
-                else
-                {
-                    udp.JoinMulticastGroup(multicast);
-                }
+                JoinMulticastGroup(udp, multicast);
 
                 _logger.LogInformation("Listening for multicast group {Group} on port {Port}.", _relayOptions.MulticastGroup, port);
 
@@ -79,6 +71,34 @@ public sealed class MulticastReceiverService : BackgroundService
                 _logger.LogError(ex, "Unexpected multicast receiver failure on port {Port}. Retrying.", port);
                 await Task.Delay(TimeSpan.FromSeconds(2), cancellationToken);
             }
+        }
+    }
+
+    private void JoinMulticastGroup(UdpClient udp, IPAddress multicast)
+    {
+        if (string.IsNullOrWhiteSpace(_relayOptions.ListenInterfaceIP)
+            || !IPAddress.TryParse(_relayOptions.ListenInterfaceIP, out var listenInterface))
+        {
+            udp.JoinMulticastGroup(multicast);
+            return;
+        }
+
+        try
+        {
+            udp.JoinMulticastGroup(multicast, listenInterface);
+            _logger.LogInformation(
+                "Joined multicast group {Group} using listen interface {InterfaceAddress}.",
+                multicast,
+                listenInterface);
+        }
+        catch (SocketException ex)
+        {
+            _logger.LogWarning(
+                ex,
+                "Failed to apply Relay:ListenInterfaceIP '{InterfaceAddress}' for group {Group}. Falling back to default interface.",
+                listenInterface,
+                multicast);
+            udp.JoinMulticastGroup(multicast);
         }
     }
 }

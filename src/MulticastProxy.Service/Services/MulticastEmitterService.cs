@@ -30,12 +30,7 @@ public sealed class MulticastEmitterService : BackgroundService
         using var sender = new UdpClient(AddressFamily.InterNetwork);
 
         sender.Client.SetSocketOption(SocketOptionLevel.IP, SocketOptionName.MulticastTimeToLive, 1);
-
-        if (!string.IsNullOrWhiteSpace(_relayOptions.SendInterfaceIP)
-            && IPAddress.TryParse(_relayOptions.SendInterfaceIP, out var sendInterface))
-        {
-            sender.Client.SetSocketOption(SocketOptionLevel.IP, SocketOptionName.MulticastInterface, sendInterface.GetAddressBytes());
-        }
+        TryConfigureSendInterface(sender.Client);
 
         _logger.LogInformation("Multicast emitter started for group {Group}.", multicastGroup);
 
@@ -60,6 +55,28 @@ public sealed class MulticastEmitterService : BackgroundService
             {
                 _logger.LogError(ex, "Unexpected multicast emitter failure.");
             }
+        }
+    }
+
+    private void TryConfigureSendInterface(Socket socket)
+    {
+        if (string.IsNullOrWhiteSpace(_relayOptions.SendInterfaceIP)
+            || !IPAddress.TryParse(_relayOptions.SendInterfaceIP, out var sendInterface))
+        {
+            return;
+        }
+
+        try
+        {
+            socket.SetSocketOption(SocketOptionLevel.IP, SocketOptionName.MulticastInterface, sendInterface.GetAddressBytes());
+            _logger.LogInformation("Using send interface {InterfaceAddress} for multicast emission.", sendInterface);
+        }
+        catch (SocketException ex)
+        {
+            _logger.LogWarning(
+                ex,
+                "Failed to apply Relay:SendInterfaceIP '{InterfaceAddress}'. Falling back to OS-selected multicast interface.",
+                sendInterface);
         }
     }
 }
