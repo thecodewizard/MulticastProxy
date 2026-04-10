@@ -11,6 +11,8 @@ Each deployed instance can:
 4. re-emit the payload as multicast on the destination network,
 5. optionally rewrite subnet references inside the payload before re-emitting.
 
+For troubleshooting, the service can also emit a structured packet-flow trace that the desktop debug viewer tails from a local file.
+
 The service is intended to run unattended as a Windows Service and must remain stable during transient network issues, interface changes, and remote peer outages.
 
 ---
@@ -238,9 +240,13 @@ Each relay packet contains a hop count.
 Track locally emitted packets and suppress immediate re-forwarding if the same packet reappears.
 
 Preferred approach:
-- instance ID plus short deduplication cache
+- instance ID plus short deduplication cache, combined with suppression of recently re-emitted local multicast packets
 
 This is more robust than a simple hop count.
+
+Operational note:
+- if `Relay:InstanceId` is omitted, the service generates a runtime GUID automatically
+- if it is configured manually, it must be unique per node
 
 ---
 
@@ -279,14 +285,16 @@ For recurring failures, use throttling or aggregation where practical to avoid f
 
 ```text
 /src
-  /MulticastRelay.Service
+  /MulticastProxy.Service
     Program.cs
     appsettings.json
     /Options
       RelayOptions.cs
       RewriteOptions.cs
+      DebugWindowOptions.cs
     /Validation
       RelayOptionsValidator.cs
+      RelayOptionsPostConfigure.cs
     /Services
       RelayWorker.cs
       MulticastReceiver.cs
@@ -295,14 +303,19 @@ For recurring failures, use throttling or aggregation where practical to avoid f
       MulticastEmitter.cs
       PayloadRewriteService.cs
       DeduplicationService.cs
+      DebugEventSink.cs
     /Protocol
       RelayEnvelope.cs
       RelayEnvelopeSerializer.cs
-    /Logging
-      EventLogExtensions.cs
+    /Debugging
+      RelayDebugEvent.cs
+
+  /MulticastProxy.DebugViewer
+    MainForm.cs
+    Program.cs
 
 /tests
-  /MulticastRelay.Service.Tests
+  /MulticastProxy.Service.Tests
     RelayOptionsValidationTests.cs
     PayloadRewriteTests.cs
     RelayEnvelopeTests.cs

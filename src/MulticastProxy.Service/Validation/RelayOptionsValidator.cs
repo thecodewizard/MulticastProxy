@@ -51,6 +51,11 @@ public sealed class RelayOptionsValidator : IValidateOptions<RelayOptions>
             failures.Add("Relay:DeduplicationWindowSeconds must be greater than 0.");
         }
 
+        if (options.LoopbackSuppressionWindowSeconds < 0)
+        {
+            failures.Add("Relay:LoopbackSuppressionWindowSeconds must be 0 or greater.");
+        }
+
         return failures.Count > 0 ? ValidateOptionsResult.Fail(failures) : ValidateOptionsResult.Success;
     }
 

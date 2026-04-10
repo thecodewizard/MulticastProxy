@@ -8,15 +8,20 @@ public sealed class PayloadRewriteService : IPayloadRewriteService
 {
     private static readonly UTF8Encoding StrictUtf8 = new(false, true);
     private readonly RewriteOptions _options;
+    private readonly IDebugEventSink _debugEventSink;
     private readonly ILogger<PayloadRewriteService> _logger;
 
-    public PayloadRewriteService(IOptions<RewriteOptions> options, ILogger<PayloadRewriteService> logger)
+    public PayloadRewriteService(
+        IOptions<RewriteOptions> options,
+        IDebugEventSink debugEventSink,
+        ILogger<PayloadRewriteService> logger)
     {
         _options = options.Value;
+        _debugEventSink = debugEventSink;
         _logger = logger;
     }
 
-    public byte[] RewriteIfNeeded(ReadOnlySpan<byte> payload)
+    public byte[] RewriteIfNeeded(Guid traceId, int port, byte[] payload)
     {
         if (string.IsNullOrWhiteSpace(_options.PayloadRewriteSourceSubnet)
             || string.IsNullOrWhiteSpace(_options.PayloadRewriteDestinationSubnet))
@@ -38,7 +43,15 @@ public sealed class PayloadRewriteService : IPayloadRewriteService
                 StringComparison.Ordinal);
 
             _logger.LogDebug("Payload rewrite applied.");
-            return StrictUtf8.GetBytes(rewritten);
+            var rewrittenBytes = StrictUtf8.GetBytes(rewritten);
+            _debugEventSink.PublishPacket(
+                stage: "PayloadRewriteApplied",
+                traceId: traceId,
+                port: port,
+                payload: payload,
+                details: $"Replaced subnet '{_options.PayloadRewriteSourceSubnet}' with '{_options.PayloadRewriteDestinationSubnet}'.",
+                rewrittenPayload: rewrittenBytes);
+            return rewrittenBytes;
         }
         catch (DecoderFallbackException)
         {

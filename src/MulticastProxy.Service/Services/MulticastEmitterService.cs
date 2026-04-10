@@ -10,17 +10,26 @@ public sealed class MulticastEmitterService : BackgroundService
     private readonly RelayOptions _relayOptions;
     private readonly IMulticastEmitQueue _queue;
     private readonly IPayloadRewriteService _payloadRewriteService;
+    private readonly ILocalMulticastOriginService _localMulticastOriginService;
+    private readonly ILoopbackSuppressionService _loopbackSuppressionService;
+    private readonly IDebugEventSink _debugEventSink;
     private readonly ILogger<MulticastEmitterService> _logger;
 
     public MulticastEmitterService(
         IOptions<RelayOptions> relayOptions,
         IMulticastEmitQueue queue,
         IPayloadRewriteService payloadRewriteService,
+        ILocalMulticastOriginService localMulticastOriginService,
+        ILoopbackSuppressionService loopbackSuppressionService,
+        IDebugEventSink debugEventSink,
         ILogger<MulticastEmitterService> logger)
     {
         _relayOptions = relayOptions.Value;
         _queue = queue;
         _payloadRewriteService = payloadRewriteService;
+        _localMulticastOriginService = localMulticastOriginService;
+        _loopbackSuppressionService = loopbackSuppressionService;
+        _debugEventSink = debugEventSink;
         _logger = logger;
     }
 
@@ -46,47 +55,79 @@ public sealed class MulticastEmitterService : BackgroundService
                     _relayOptions.SendInterfaceIP);
                 return;
             }
-
-            if (!NetworkInterfaceHelper.IsLocalIPv4Address(sendInterface))
-            {
-                _logger.LogError(
-                    "Multicast emitter disabled because Relay:SendInterfaceIP '{SendInterface}' is not assigned to any local network interface.",
-                    sendInterface);
-                return;
-            }
         }
 
-        using var sender = new UdpClient(AddressFamily.InterNetwork);
+        while (!stoppingToken.IsCancellationRequested)
+        {
+            using var sender = new UdpClient(AddressFamily.InterNetwork);
+            IPEndPoint? localSenderEndpoint = null;
 
-        try
-        {
-            sender.Client.SetSocketOption(SocketOptionLevel.IP, SocketOptionName.MulticastTimeToLive, 1);
-            if (!TryConfigureSendInterface(sender.Client, sendInterface))
-            {
-                return;
-            }
-        }
-        catch (SocketException ex)
-        {
-            _logger.LogError(ex, "Multicast emitter disabled because socket setup failed.");
-            return;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Multicast emitter disabled due to unexpected startup error.");
-            return;
-        }
-
-        _logger.LogInformation("Multicast emitter started for group {Group}.", multicastGroup);
-
-        await foreach (var datagram in _queue.ReadAllAsync(stoppingToken))
-        {
             try
             {
-                var payload = _payloadRewriteService.RewriteIfNeeded(datagram.Payload);
-                var endpoint = new IPEndPoint(multicastGroup, datagram.Port);
-                await sender.SendAsync(payload, endpoint, stoppingToken);
-                _logger.LogDebug("Emitted multicast datagram to {Endpoint} with {Length} bytes.", endpoint, payload.Length);
+                sender.MulticastLoopback = false;
+                sender.Client.SetSocketOption(SocketOptionLevel.IP, SocketOptionName.MulticastTimeToLive, 1);
+                sender.Client.Bind(new IPEndPoint(sendInterface ?? IPAddress.Any, 0));
+                if (sender.Client.LocalEndPoint is IPEndPoint localEndpoint)
+                {
+                    localSenderEndpoint = localEndpoint;
+                    _localMulticastOriginService.RegisterSender(localEndpoint);
+                    _debugEventSink.PublishPacket(
+                        stage: "LocalSenderRegistered",
+                        traceId: Guid.Empty,
+                        port: 0,
+                        payload: Array.Empty<byte>(),
+                        remoteEndpoint: localEndpoint.ToString(),
+                        details: $"Registered local multicast sender endpoint {localEndpoint}.");
+                    _logger.LogInformation("Registered local multicast sender endpoint {LocalEndpoint}.", localEndpoint);
+                }
+
+                if (!TryConfigureSendInterface(sender.Client, sendInterface))
+                {
+                    await Task.Delay(TimeSpan.FromSeconds(5), stoppingToken);
+                    continue;
+                }
+
+                _logger.LogInformation("Multicast emitter started for group {Group} with local multicast loopback disabled.", multicastGroup);
+
+                await foreach (var datagram in _queue.ReadAllAsync(stoppingToken))
+                {
+                    try
+                    {
+                        var payload = _payloadRewriteService.RewriteIfNeeded(datagram.TraceId, datagram.Port, datagram.Payload);
+                        var endpoint = new IPEndPoint(multicastGroup, datagram.Port);
+                        _loopbackSuppressionService.RegisterRecentlyEmitted(datagram.Port, payload);
+                        await sender.SendAsync(payload, endpoint, stoppingToken);
+                        _debugEventSink.PublishPacket(
+                            stage: "MulticastEmitted",
+                            traceId: datagram.TraceId,
+                            port: datagram.Port,
+                            payload: payload,
+                            remoteEndpoint: endpoint.ToString(),
+                            details: localSenderEndpoint is null
+                                ? $"Re-multicasted packet to {endpoint} after arming loopback suppression for the emitted payload."
+                                : $"Re-multicasted packet to {endpoint} from local sender {localSenderEndpoint} after arming loopback suppression for the emitted payload.");
+                        _logger.LogDebug("Emitted multicast datagram to {Endpoint} with {Length} bytes.", endpoint, payload.Length);
+                    }
+                    catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+                    {
+                        break;
+                    }
+                    catch (SocketException ex)
+                    {
+                        _debugEventSink.PublishPacket(
+                            stage: "MulticastEmitFailed",
+                            traceId: datagram.TraceId,
+                            port: datagram.Port,
+                            payload: datagram.Payload,
+                            remoteEndpoint: multicastGroup.ToString(),
+                            details: $"Multicast emit failure: {ex.SocketErrorCode}.");
+                        _logger.LogWarning(ex, "Multicast emit failed and packet was dropped.");
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "Unexpected multicast emitter failure.");
+                    }
+                }
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
@@ -94,11 +135,13 @@ public sealed class MulticastEmitterService : BackgroundService
             }
             catch (SocketException ex)
             {
-                _logger.LogWarning(ex, "Multicast emit failed and packet was dropped.");
+                _logger.LogWarning(ex, "Multicast emitter socket setup failed. Retrying.");
+                await Task.Delay(TimeSpan.FromSeconds(5), stoppingToken);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Unexpected multicast emitter failure.");
+                _logger.LogError(ex, "Unexpected multicast emitter startup error. Retrying.");
+                await Task.Delay(TimeSpan.FromSeconds(5), stoppingToken);
             }
         }
     }
@@ -118,9 +161,9 @@ public sealed class MulticastEmitterService : BackgroundService
         }
         catch (SocketException ex)
         {
-            _logger.LogError(
+            _logger.LogWarning(
                 ex,
-                "Multicast emitter disabled because Relay:SendInterfaceIP '{InterfaceAddress}' could not be applied.",
+                "Relay:SendInterfaceIP '{InterfaceAddress}' could not be applied yet. Retrying.",
                 sendInterface);
             return false;
         }

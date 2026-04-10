@@ -9,6 +9,8 @@ The primary configuration approach is:
 - optional environment-specific overrides
 - strongly validated settings at startup
 
+When running under Windows Service Control Manager, the service resolves configuration from its executable directory. It does not rely on the process working directory, which is often `C:\Windows\System32` for services.
+
 If configuration is invalid, the service should fail startup with a clear Windows Event Log message.
 
 ---
@@ -29,7 +31,7 @@ Example:
 Notes:
 - `239.0.0.0/8` is used here as an example administratively scoped multicast range for documentation.
 - Must be a valid IPv4 multicast address if used.
-- `224.0.0.0` is treated as wildcard mode: the service binds to the configured port but does not issue an IGMP join, so receive behavior depends on OS socket behavior.
+- `224.0.0.0` is treated as wildcard mode. The service first attempts the same explicit join used by the legacy relay, then falls back to bind-only mode if the OS rejects that join.
 - Do not hardcode this in source code.
 
 ---
@@ -110,6 +112,33 @@ If omitted:
 
 ---
 
+### `Relay:LoopbackSuppressionWindowSeconds`
+How long the service remembers a packet that it just re-emitted as multicast locally, so it does not tunnel that same packet again if the local multicast listener sees it.
+
+Example:
+
+    "LoopbackSuppressionWindowSeconds": 5
+
+Rules:
+- `0` disables loopback suppression
+- positive values enable short-term suppression of locally re-emitted packets
+- this setting is specifically intended to prevent ping-pong relay loops between two peers
+
+---
+
+### `Relay:InstanceId`
+Optional unique relay identity used for loop prevention.
+
+If omitted:
+- the service generates a runtime GUID automatically
+- this is the recommended default for most installs
+
+If explicitly set:
+- it must be unique per deployed node
+- do not copy the same value to both peers or the receiver will treat the peer's packets as local and drop them
+
+---
+
 ## Rewrite settings
 
 Payload rewrite is optional.
@@ -135,6 +164,40 @@ Rules:
 - If both are absent, rewrite is disabled.
 - Rewrite should only occur when safe for the detected payload format.
 - Binary or unknown payload formats should pass through unchanged.
+
+---
+
+## Debug window settings
+
+The service can write a structured live event stream for the desktop debug viewer.
+The file is created immediately at startup and begins with a `ServiceStarted` diagnostic event that records the effective content root and relay settings the service is using.
+
+### `DebugWindow:Enabled`
+Enables structured packet-flow tracing to the debug events file.
+
+Recommended use:
+- enabled by default so operators can immediately inspect live packet flow
+- set it to `false` if you want to disable debug-event capture in a quieter deployment
+
+### `DebugWindow:EventsFilePath`
+Optional absolute path for the event file.
+
+If omitted on Windows:
+- the service writes to `%ProgramData%\MulticastProxy\debug-events.jsonl`
+
+### `DebugWindow:MaxPayloadPreviewBytes`
+Controls how many bytes of each payload are captured in the debug event preview.
+
+Example:
+
+    "MaxPayloadPreviewBytes": 256
+
+### `DebugWindow:MaxFileSizeMegabytes`
+Maximum size of the active debug event file before it rotates to a `.previous` file.
+
+Example:
+
+    "MaxFileSizeMegabytes": 25
 
 ---
 
@@ -173,11 +236,18 @@ Normal production deployments should not emit per-packet logs.
     "TunnelPort": 19053,
     "DestinationIP": "198.51.100.10",
     "ListenInterfaceIP": "192.0.2.20",
-    "SendInterfaceIP": "198.51.100.20"
+    "SendInterfaceIP": "198.51.100.20",
+    "LoopbackSuppressionWindowSeconds": 5
   },
   "Rewrite": {
     "PayloadRewriteSourceSubnet": "192.0.2.",
     "PayloadRewriteDestinationSubnet": "198.51.100."
+  },
+  "DebugWindow": {
+    "Enabled": true,
+    "EventsFilePath": "",
+    "MaxPayloadPreviewBytes": 256,
+    "MaxFileSizeMegabytes": 25
   },
   "Logging": {
     "LogLevel": {

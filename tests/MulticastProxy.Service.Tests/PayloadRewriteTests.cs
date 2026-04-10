@@ -14,7 +14,7 @@ public class PayloadRewriteTests
         var service = CreateService(new RewriteOptions());
         var payload = Encoding.UTF8.GetBytes("device=192.0.2.10");
 
-        var result = service.RewriteIfNeeded(payload);
+        var result = service.RewriteIfNeeded(Guid.NewGuid(), 9053, payload);
 
         Assert.Equal(payload, result);
     }
@@ -30,7 +30,7 @@ public class PayloadRewriteTests
 
         var payload = Encoding.UTF8.GetBytes("device=192.0.2.10");
 
-        var result = service.RewriteIfNeeded(payload);
+        var result = service.RewriteIfNeeded(Guid.NewGuid(), 9053, payload);
 
         Assert.Equal("device=198.51.100.10", Encoding.UTF8.GetString(result));
     }
@@ -46,11 +46,28 @@ public class PayloadRewriteTests
 
         byte[] payload = [0xFF, 0xFE, 0xFD, 0xFC];
 
-        var result = service.RewriteIfNeeded(payload);
+        var result = service.RewriteIfNeeded(Guid.NewGuid(), 9053, payload);
 
         Assert.Equal(payload, result);
     }
 
     private static PayloadRewriteService CreateService(RewriteOptions options) =>
-        new(Microsoft.Extensions.Options.Options.Create(options), NullLogger<PayloadRewriteService>.Instance);
+        new(
+            Microsoft.Extensions.Options.Options.Create(options),
+            new NullDebugEventSink(),
+            NullLogger<PayloadRewriteService>.Instance);
+
+    private sealed class NullDebugEventSink : IDebugEventSink
+    {
+        public void PublishPacket(
+            string stage,
+            Guid traceId,
+            int port,
+            byte[] payload,
+            string? remoteEndpoint = null,
+            string? details = null,
+            byte[]? rewrittenPayload = null)
+        {
+        }
+    }
 }

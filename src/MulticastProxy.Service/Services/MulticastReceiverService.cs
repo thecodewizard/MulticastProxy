@@ -10,15 +10,24 @@ public sealed class MulticastReceiverService : BackgroundService
 {
     private readonly RelayOptions _relayOptions;
     private readonly ITunnelSendQueue _queue;
+    private readonly ILocalMulticastOriginService _localMulticastOriginService;
+    private readonly ILoopbackSuppressionService _loopbackSuppressionService;
+    private readonly IDebugEventSink _debugEventSink;
     private readonly ILogger<MulticastReceiverService> _logger;
 
     public MulticastReceiverService(
         IOptions<RelayOptions> relayOptions,
         ITunnelSendQueue queue,
+        ILocalMulticastOriginService localMulticastOriginService,
+        ILoopbackSuppressionService loopbackSuppressionService,
+        IDebugEventSink debugEventSink,
         ILogger<MulticastReceiverService> logger)
     {
         _relayOptions = relayOptions.Value;
         _queue = queue;
+        _localMulticastOriginService = localMulticastOriginService;
+        _loopbackSuppressionService = loopbackSuppressionService;
+        _debugEventSink = debugEventSink;
         _logger = logger;
     }
 
@@ -97,8 +106,16 @@ public sealed class MulticastReceiverService : BackgroundService
                 while (!cancellationToken.IsCancellationRequested)
                 {
                     var receiveResult = await udp.ReceiveAsync(cancellationToken);
-                    await _queue.EnqueueAsync(new RelayDatagram(port, receiveResult.Buffer), cancellationToken);
-                    _logger.LogDebug("Received multicast datagram on port {Port} with {Length} bytes.", port, receiveResult.Buffer.Length);
+                    await MulticastReceiveHandler.ProcessAsync(
+                        port,
+                        receiveResult.Buffer,
+                        receiveResult.RemoteEndPoint,
+                        _queue,
+                        _localMulticastOriginService,
+                        _loopbackSuppressionService,
+                        _debugEventSink,
+                        _logger,
+                        cancellationToken);
                 }
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -131,9 +148,7 @@ public sealed class MulticastReceiverService : BackgroundService
     {
         if (IsWildcardMulticastGroup(multicast))
         {
-            _logger.LogWarning(
-                "Relay:MulticastGroup is configured as {Group}. Running in wildcard mode (no IGMP join); receiving multicast now depends on OS socket behavior.",
-                multicast);
+            TryJoinWildcardGroup(udp, multicast, listenInterface);
             return;
         }
 
@@ -148,6 +163,34 @@ public sealed class MulticastReceiverService : BackgroundService
             "Joined multicast group {Group} using listen interface {InterfaceAddress}.",
             multicast,
             listenInterface);
+    }
+
+    private void TryJoinWildcardGroup(UdpClient udp, IPAddress multicast, IPAddress? listenInterface)
+    {
+        try
+        {
+            if (listenInterface is null)
+            {
+                udp.JoinMulticastGroup(multicast);
+                _logger.LogInformation(
+                    "Joined wildcard multicast group {Group} without an explicit interface for legacy compatibility.",
+                    multicast);
+                return;
+            }
+
+            udp.JoinMulticastGroup(multicast, listenInterface);
+            _logger.LogInformation(
+                "Joined wildcard multicast group {Group} using listen interface {InterfaceAddress} for legacy compatibility.",
+                multicast,
+                listenInterface);
+        }
+        catch (SocketException ex)
+        {
+            _logger.LogWarning(
+                ex,
+                "Wildcard multicast join for {Group} failed; continuing in bind-only mode because some environments do not support joining 224.0.0.0 explicitly.",
+                multicast);
+        }
     }
 
     private static bool IsWildcardMulticastGroup(IPAddress multicast)

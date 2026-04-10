@@ -11,6 +11,15 @@ The service works by:
 4. re-emitting it as multicast on the destination network,
 5. optionally rewriting subnet references inside the payload when needed.
 
+For troubleshooting, the repository also includes a desktop debug viewer that tails structured relay events from the service and shows:
+- multicast packets received locally
+- packets forwarded over the tunnel
+- packets accepted or dropped on the tunnel receiver
+- payload rewrites
+- packets re-multicasted locally
+
+When running as a Windows service, configuration is resolved from the executable directory rather than the service working directory, so the installed `appsettings.json` is used consistently in both service and interactive runs.
+
 ---
 
 ## Project status
@@ -98,14 +107,18 @@ For more detail, see:
 │   └── appsettings.example.json
 
 /src
-  /MulticastRelay.Service
+  /MulticastProxy.Service
     Program.cs
     appsettings.json
     /Options
     /Validation
     /Services
     /Protocol
-    /Logging
+    /Debugging
+
+  /MulticastProxy.DebugViewer
+    Program.cs
+    MainForm.cs
 
 /tests
-  /MulticastRelay.Service.Tests
+  /MulticastProxy.Service.Tests

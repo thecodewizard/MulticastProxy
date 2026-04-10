@@ -1,33 +1,53 @@
 <?xml version="1.0" encoding="UTF-8"?>
+<?ifndef ProductVersion ?>
+<?define ProductVersion = "1.0.0" ?>
+<?endif ?>
+<?ifndef PublishDir ?>
+<?define PublishDir = "..\artifacts\publish\win-x64\" ?>
+<?endif ?>
+<?ifndef DebugViewerPublishDir ?>
+<?define DebugViewerPublishDir = "..\artifacts\publish\win-x64\DebugViewer\" ?>
+<?endif ?>
 <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
   <Package
     Name="MulticastProxy"
     Manufacturer="MulticastProxy"
-    Version="1.0.0"
+    Version="$(var.ProductVersion)"
     UpgradeCode="5B6975FB-40C2-4E4B-9EFA-35FDF7E88590"
     InstallerVersion="500"
     Scope="perMachine">
 
     <SummaryInformation Description="MulticastProxy Windows Service installer." />
-    <MajorUpgrade DowngradeErrorMessage="A newer version of MulticastProxy is already installed." />
+    <MajorUpgrade
+      AllowSameVersionUpgrades="yes"
+      Schedule="afterInstallValidate"
+      DowngradeErrorMessage="A newer version of MulticastProxy is already installed." />
     <MediaTemplate EmbedCab="yes" />
 
     <StandardDirectory Id="ProgramFiles64Folder">
-      <Directory Id="INSTALLFOLDER" Name="MulticastProxy" />
+      <Directory Id="INSTALLFOLDER" Name="MulticastProxy">
+        <Directory Id="DEBUGVIEWERFOLDER" Name="DebugViewer" />
+      </Directory>
     </StandardDirectory>
 
     <Feature Id="MainFeature" Title="MulticastProxy" Level="1">
       <ComponentGroupRef Id="PublishedFiles" />
+      <ComponentGroupRef Id="DebugViewerFiles" />
       <ComponentRef Id="ServiceExecutableComponent" />
       <ComponentRef Id="ConfigComponent" />
     </Feature>
 
     <ComponentGroup Id="PublishedFiles" Directory="INSTALLFOLDER">
       <Files Include="$(var.PublishDir)**">
+        <Exclude Files="$(var.PublishDir)DebugViewer\**" />
         <Exclude Files="$(var.PublishDir)MulticastProxy.Service.exe" />
         <Exclude Files="$(var.PublishDir)appsettings.json" />
         <Exclude Files="$(var.PublishDir)appsettings.Development.json" />
       </Files>
+    </ComponentGroup>
+
+    <ComponentGroup Id="DebugViewerFiles" Directory="DEBUGVIEWERFOLDER">
+      <Files Include="$(var.DebugViewerPublishDir)**" />
     </ComponentGroup>
 
     <Component
@@ -65,6 +85,7 @@
       Directory="INSTALLFOLDER"
       Guid="3A4EE8D4-7A7A-4380-B660-59A90D9A2047"
       Bitness="always64"
+      Permanent="yes"
       NeverOverwrite="yes">
 
       <File
