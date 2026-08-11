@@ -92,6 +92,7 @@ This same pattern works in both directions.
 For more detail, see:
 - `docs/architecture.md`
 - `docs/configuration.md`
+- `docs/changelog.md`
 
 ---
 
@@ -103,6 +104,7 @@ For more detail, see:
 ├── README.md
 ├── docs
 │   ├── architecture.md
+│   ├── changelog.md
 │   ├── configuration.md
 │   └── appsettings.example.json
 
