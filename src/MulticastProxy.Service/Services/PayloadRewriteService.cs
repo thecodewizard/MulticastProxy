@@ -32,6 +32,8 @@ public sealed class PayloadRewriteService : IPayloadRewriteService
 
         try
         {
+            // Only the text-based discovery packets should be rewritten. Everything else needs
+            // to stay byte-for-byte identical so the relay does not interfere with other traffic.
             var text = StrictUtf8.GetString(payload);
             if (!text.Contains(_options.PayloadRewriteSourceSubnet, StringComparison.Ordinal))
             {
@@ -65,6 +67,9 @@ public sealed class PayloadRewriteService : IPayloadRewriteService
 
     private static string RewriteDiscoveryCrcIfPresent(string text)
     {
+        // The RX discovery payload includes a simple XOR checksum before END. Rewriting the
+        // advertised scanner IP without refreshing this value makes the announcement arrive
+        // but still look invalid to the client.
         var crcMarkerIndex = text.IndexOf(DiscoveryCrcMarker, StringComparison.Ordinal);
         if (crcMarkerIndex < 0)
         {

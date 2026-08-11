@@ -93,6 +93,9 @@ public sealed class MulticastEmitterService : BackgroundService
                 {
                     try
                     {
+                        // Rewrite on the emit side so only the remote segment sees the NAT-visible
+                        // discovery address. The later unicast sessions then go directly to that
+                        // translated scanner IP and do not flow back through this relay.
                         var payload = _payloadRewriteService.RewriteIfNeeded(datagram.TraceId, datagram.Port, datagram.Payload);
                         var endpoint = new IPEndPoint(multicastGroup, datagram.Port);
                         _loopbackSuppressionService.RegisterRecentlyEmitted(datagram.Port, payload);

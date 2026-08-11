@@ -61,6 +61,8 @@
         Source="$(var.PublishDir)MulticastProxy.Service.exe"
         KeyPath="yes" />
 
+      <!-- Keep a single relay instance available to every RDS session by installing per-machine
+           and running under LocalSystem instead of under an individual user profile. -->
       <ServiceInstall
         Id="MulticastProxyServiceInstall"
         Name="MulticastProxy"
