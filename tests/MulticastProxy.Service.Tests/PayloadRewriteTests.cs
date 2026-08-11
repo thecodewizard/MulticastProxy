@@ -36,6 +36,25 @@ public class PayloadRewriteTests
     }
 
     [Fact]
+    public void RewriteIfNeeded_WhenPayloadContainsDiscoveryChecksum_RewritesSubnetAndUpdatesChecksum()
+    {
+        var service = CreateService(new RewriteOptions
+        {
+            PayloadRewriteSourceSubnet = "172.16.10.",
+            PayloadRewriteDestinationSubnet = "10.50.13."
+        });
+
+        var payload = Encoding.UTF8.GetBytes(
+            "CS7600[1][SN:NCCA042][NAME:NCCA042][IP:172.16.10.5][N:0x0515][S:1][MNUM:][MENG:][MLNG:EN][MTXT:][CRC:0x59]END");
+
+        var result = service.RewriteIfNeeded(Guid.NewGuid(), 9053, payload);
+
+        Assert.Equal(
+            "CS7600[1][SN:NCCA042][NAME:NCCA042][IP:10.50.13.5][N:0x0515][S:1][MNUM:][MENG:][MLNG:EN][MTXT:][CRC:0x6D]END",
+            Encoding.UTF8.GetString(result));
+    }
+
+    [Fact]
     public void RewriteIfNeeded_ForInvalidUtf8_ReturnsOriginalPayload()
     {
         var service = CreateService(new RewriteOptions
